@@ -1,8 +1,8 @@
 package processor
 
 import (
+	"VKTestTask/internal/repository"
 	"errors"
-	"github.com/mxsfog/VKTestTask/internal/repository"
 	"log"
 	"sync"
 )

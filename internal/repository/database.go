@@ -14,7 +14,8 @@ func NewDatabaseRepository(db *gorm.DB) *DatabaseRepository {
 
 func (r *DatabaseRepository) GetDocument(url string) (*TDocument, error) {
 	var doc TDocument
-	if err := r.db.First(&doc, "url = ?", url).Error; err != nil {
+	err := r.db.Where("url = ?", url).First(&doc).Error
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
 		}
