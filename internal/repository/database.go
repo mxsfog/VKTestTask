@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"errors"
 	"gorm.io/gorm"
 )
 
@@ -16,7 +17,7 @@ func (r *DatabaseRepository) GetDocument(url string) (*TDocument, error) {
 	var doc TDocument
 	err := r.db.Where("url = ?", url).First(&doc).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err

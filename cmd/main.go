@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	conf, err := config.LoadConfig("conf/conf.yaml")
+	conf, err := config.LoadConfig("config/config.yaml")
 	if err != nil {
 		log.Fatalf("Failed to load conf: %v", err)
 	}
@@ -51,7 +51,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to start partition consumer: %v", err)
 	}
-	defer partitionConsumer.Close()
+
+	defer func() {
+		if err := partitionConsumer.Close(); err != nil {
+			log.Printf("Failed to close partition consumer: %v", err)
+		}
+	}()
 
 	repo := repository.NewDatabaseRepository(db)
 	proc := processor.NewDocumentProcessor(repo)
@@ -82,7 +87,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to start producer: %v", err)
 	}
-	defer producer.Close()
+	defer func() {
+		if err := producer.Close(); err != nil {
+			log.Printf("Failed to close producer: %v", err)
+		}
+	}()
 
 	doc := &repository.TDocument{
 		Url:       "http://example.com/doc1",
