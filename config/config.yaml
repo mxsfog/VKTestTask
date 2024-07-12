@@ -5,7 +5,7 @@ database:
   dbname: yourdb
   port: 5432
   sslmode: disable
-  timezone: Asia/Shanghai
+  timezone: Europe/Moscow
 kafka:
   brokers:
     - localhost:9092
