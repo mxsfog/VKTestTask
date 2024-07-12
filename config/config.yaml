@@ -1,0 +1,13 @@
+database:
+  host: localhost
+  user: youruser
+  password: yourpassword
+  dbname: yourdb
+  port: 5432
+  sslmode: disable
+  timezone: Asia/Shanghai
+kafka:
+  brokers:
+    - localhost:9092
+  topic: documents
+  processed_topic: processed_documents

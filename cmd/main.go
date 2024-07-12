@@ -3,34 +3,74 @@ package main
 import (
 	"encoding/json"
 	"github.com/IBM/sarama"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"log"
-
 	"github.com/mxsfog/VKTestTask/internal/processor"
 	"github.com/mxsfog/VKTestTask/internal/repository"
+	"gopkg.in/yaml.v2"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"io/ioutil"
+	"log"
 )
 
+type Config struct {
+	Database struct {
+		Host     string `yaml:"host"`
+		User     string `yaml:"user"`
+		Password string `yaml:"password"`
+		DBName   string `yaml:"dbname"`
+		Port     int    `yaml:"port"`
+		SSLMode  string `yaml:"sslmode"`
+		TimeZone string `yaml:"timezone"`
+	} `yaml:"database"`
+	Kafka struct {
+		Brokers        []string `yaml:"brokers"`
+		Topic          string   `yaml:"topic"`
+		ProcessedTopic string   `yaml:"processed_topic"`
+	} `yaml:"kafka"`
+}
+
+func loadConfig(path string) (*Config, error) {
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var config Config
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
 func main() {
-	// Database connection
-	dsn := "host=localhost user=youruser password=yourpassword dbname=yourdb port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+	config, err := loadConfig("config/config.yaml")
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	dsn := "host=" + config.Database.Host +
+		" user=" + config.Database.User +
+		" password=" + config.Database.Password +
+		" dbname=" + config.Database.DBName +
+		" port=" + string(config.Database.Port) +
+		" sslmode=" + config.Database.SSLMode +
+		" TimeZone=" + config.Database.TimeZone
+
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// Auto migrate the schema
 	db.AutoMigrate(&repository.TDocument{})
 
-	// Kafka consumer setup
-	config := sarama.NewConfig()
-	config.Consumer.Return.Errors = true
-	consumer, err := sarama.NewConsumer([]string{"localhost:9092"}, config)
+	saramaConfig := sarama.NewConfig()
+	saramaConfig.Consumer.Return.Errors = true
+
+	consumer, err := sarama.NewConsumer(config.Kafka.Brokers, saramaConfig)
 	if err != nil {
 		log.Fatalf("Failed to start consumer: %v", err)
 	}
 
-	partitionConsumer, err := consumer.ConsumePartition("documents", 0, sarama.OffsetNewest)
+	partitionConsumer, err := consumer.ConsumePartition(config.Kafka.Topic, 0, sarama.OffsetNewest)
 	if err != nil {
 		log.Fatalf("Failed to start partition consumer: %v", err)
 	}
@@ -59,11 +99,9 @@ func main() {
 		}
 
 		log.Printf("Processed document: %+v", processedDoc)
-		// Here you can send processedDoc to another Kafka topic or handle it as needed
 	}
 
-	// Kafka producer example (you might want to send processed documents to another topic)
-	producer, err := sarama.NewSyncProducer([]string{"localhost:9092"}, nil)
+	producer, err := sarama.NewSyncProducer(config.Kafka.Brokers, nil)
 	if err != nil {
 		log.Fatalf("Failed to start producer: %v", err)
 	}
@@ -77,7 +115,7 @@ func main() {
 	}
 	docBytes, _ := json.Marshal(doc)
 	message := &sarama.ProducerMessage{
-		Topic: "processed_documents",
+		Topic: config.Kafka.ProcessedTopic,
 		Value: sarama.ByteEncoder(docBytes),
 	}
 	_, _, err = producer.SendMessage(message)
