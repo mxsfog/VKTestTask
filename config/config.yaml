@@ -1,13 +1,13 @@
 database:
-  host: localhost
-  user: youruser
-  password: yourpassword
-  dbname: yourdb
-  port: 5432
-  sslmode: disable
-  timezone: Europe/Moscow
+  host: ${DB_HOST}
+  user: ${DB_USER}
+  password: ${DB_PASSWORD}
+  dbname: ${DB_NAME}
+  port: ${DB_PORT}
+  sslmode: ${DB_SSLMODE}
+  timezone: ${DB_TIMEZONE}
 kafka:
   brokers:
-    - localhost:9092
-  topic: documents
-  processed_topic: processed_documents
+    - ${KAFKA_BROKERS}
+  topic: ${KAFKA_TOPIC}
+  processed_topic: ${KAFKA_PROCESSED_TOPIC}

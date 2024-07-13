@@ -10,12 +10,13 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"log"
+	"sync"
 )
 
 func main() {
 	conf, err := config.LoadConfig("config/config.yaml")
 	if err != nil {
-		log.Fatalf("Failed to load conf: %v", err)
+		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	dsn := fmt.Sprintf(
@@ -52,14 +53,43 @@ func main() {
 		log.Fatalf("Failed to start partition consumer: %v", err)
 	}
 
-	defer func() {
-		if err := partitionConsumer.Close(); err != nil {
-			log.Printf("Failed to close partition consumer: %v", err)
+	defer func(partitionConsumer sarama.PartitionConsumer) {
+		err := partitionConsumer.Close()
+		if err != nil {
+			log.Printf("Error closing partition consumer: %v", err)
 		}
-	}()
+	}(partitionConsumer)
 
 	repo := repository.NewDatabaseRepository(db)
 	proc := processor.NewDocumentProcessor(repo)
+
+	// Добавление нескольких примерных данных через интерфейс
+	sampleDocs := []*repository.TDocument{
+		{
+			Url:       "http://example.com/doc1",
+			PubDate:   100,
+			FetchTime: 200,
+			Text:      "First version",
+		},
+		{
+			Url:       "http://example.com/doc2",
+			PubDate:   200,
+			FetchTime: 300,
+			Text:      "Second version",
+		},
+		{
+			Url:       "http://example.com/doc3",
+			PubDate:   300,
+			FetchTime: 400,
+			Text:      "Third version",
+		},
+	}
+
+	for _, doc := range sampleDocs {
+		if _, err := proc.Process(doc); err != nil {
+			log.Fatalf("Failed to process sample document: %v", err)
+		}
+	}
 
 	go func() {
 		for err := range partitionConsumer.Errors() {
@@ -67,47 +97,52 @@ func main() {
 		}
 	}()
 
+	var wg sync.WaitGroup
+
 	for msg := range partitionConsumer.Messages() {
-		var doc repository.TDocument
-		if err := json.Unmarshal(msg.Value, &doc); err != nil {
-			log.Printf("Failed to unmarshal message: %v", err)
-			continue
-		}
+		wg.Add(1)
+		go func(msg *sarama.ConsumerMessage) {
+			defer wg.Done()
+			var doc repository.TDocument
+			if err := json.Unmarshal(msg.Value, &doc); err != nil {
+				log.Printf("Failed to unmarshal message: %v", err)
+				return
+			}
 
-		processedDoc, err := proc.Process(&doc)
-		if err != nil {
-			log.Printf("Failed to process document: %v", err)
-			continue
-		}
+			processedDoc, err := proc.Process(&doc)
+			if err != nil {
+				log.Printf("Failed to process document: %v", err)
+				return
+			}
 
-		log.Printf("Processed document: %+v", processedDoc)
+			log.Printf("Processed document: %+v", processedDoc)
+		}(msg)
 	}
+
+	wg.Wait()
 
 	producer, err := sarama.NewSyncProducer(conf.Kafka.Brokers, nil)
 	if err != nil {
 		log.Fatalf("Failed to start producer: %v", err)
 	}
-	defer func() {
-		if err := producer.Close(); err != nil {
-			log.Printf("Failed to close producer: %v", err)
+	defer func(producer sarama.SyncProducer) {
+		err := producer.Close()
+		if err != nil {
+			log.Printf("Error closing producer: %v", err)
 		}
-	}()
+	}(producer)
 
-	doc := &repository.TDocument{
-		Url:       "http://example.com/doc1",
-		PubDate:   100,
-		FetchTime: 200,
-		Text:      "First version",
-	}
-	docBytes, _ := json.Marshal(doc)
-	message := &sarama.ProducerMessage{
-		Topic: conf.Kafka.ProcessedTopic,
-		Value: sarama.ByteEncoder(docBytes),
-	}
-	_, _, err = producer.SendMessage(message)
-	if err != nil {
-		log.Printf("Failed to send message: %v", err)
-	} else {
-		log.Println("Message sent successfully")
+	for doc := range sampleDocs {
+		docBytes, _ := json.Marshal(doc)
+		message := &sarama.ProducerMessage{
+			Topic: conf.Kafka.ProcessedTopic,
+			Value: sarama.ByteEncoder(docBytes),
+		}
+		_, _, err = producer.SendMessage(message)
+		if err != nil {
+			log.Printf("Failed to send message: %v", err)
+		} else {
+			log.Println("Message sent successfully")
+		}
 	}
 }
