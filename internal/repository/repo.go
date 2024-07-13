@@ -4,10 +4,11 @@ package repository
 type DocumentRepository interface {
 	Save(document *TDocument) error
 	FindAll() ([]TDocument, error)
+	FindByUrl(url string) ([]TDocument, error)
 }
 
 func (r *DatabaseRepository) Save(document *TDocument) error {
-	return r.db.Create(document).Error
+	return r.db.Save(document).Error
 }
 
 func (r *DatabaseRepository) FindAll() ([]TDocument, error) {
@@ -16,11 +17,18 @@ func (r *DatabaseRepository) FindAll() ([]TDocument, error) {
 	return documents, err
 }
 
+func (r *DatabaseRepository) FindByUrl(url string) ([]TDocument, error) {
+	var documents []TDocument
+	err := r.db.Where("url = ?", url).Find(&documents).Error
+	return documents, err
+}
+
 // TDocument - структура документа
 type TDocument struct {
-	ID        uint   `gorm:"primaryKey"`
-	Url       string `gorm:"not null"`
-	PubDate   int64  `gorm:"not null"`
-	FetchTime int64  `gorm:"not null"`
-	Text      string `gorm:"not null"`
+	ID             uint   `gorm:"primaryKey"`
+	Url            string `gorm:"not null"`
+	PubDate        int64  `gorm:"not null"`
+	FetchTime      int64  `gorm:"not null"`
+	Text           string `gorm:"not null"`
+	FirstFetchTime int64  `gorm:"not null"`
 }

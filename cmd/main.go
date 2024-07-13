@@ -132,7 +132,7 @@ func main() {
 		}
 	}(producer)
 
-	for doc := range sampleDocs {
+	for _, doc := range sampleDocs {
 		docBytes, _ := json.Marshal(doc)
 		message := &sarama.ProducerMessage{
 			Topic: conf.Kafka.ProcessedTopic,
