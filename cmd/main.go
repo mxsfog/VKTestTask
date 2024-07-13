@@ -14,11 +14,13 @@ import (
 )
 
 func main() {
+	// Загрузка конфигурации
 	conf, err := config.LoadConfig("config/config.yaml")
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
+	// Подключение к базе данных
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=%s",
 		conf.Database.Host,
@@ -40,6 +42,7 @@ func main() {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
+	// Настройка Kafka потребителя
 	saramaConfig := sarama.NewConfig()
 	saramaConfig.Consumer.Return.Errors = true
 
@@ -60,6 +63,7 @@ func main() {
 		}
 	}(partitionConsumer)
 
+	// Настройка репозитория и процессора
 	repo := repository.NewDatabaseRepository(db)
 	proc := processor.NewDocumentProcessor(repo)
 
@@ -91,6 +95,7 @@ func main() {
 		}
 	}
 
+	// Обработка ошибок потребителя
 	go func() {
 		for err := range partitionConsumer.Errors() {
 			log.Printf("Error consuming messages: %v", err)
@@ -99,6 +104,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
+	// Чтение сообщений из Kafka
 	for msg := range partitionConsumer.Messages() {
 		wg.Add(1)
 		go func(msg *sarama.ConsumerMessage) {
@@ -116,33 +122,32 @@ func main() {
 			}
 
 			log.Printf("Processed document: %+v", processedDoc)
+
+			// Отправка обработанного сообщения в Kafka
+			producer, err := sarama.NewSyncProducer(conf.Kafka.Brokers, nil)
+			if err != nil {
+				log.Fatalf("Failed to start producer: %v", err)
+			}
+			defer func(producer sarama.SyncProducer) {
+				err := producer.Close()
+				if err != nil {
+					log.Printf("Error closing producer: %v", err)
+				}
+			}(producer)
+
+			docBytes, _ := json.Marshal(processedDoc)
+			message := &sarama.ProducerMessage{
+				Topic: conf.Kafka.ProcessedTopic,
+				Value: sarama.ByteEncoder(docBytes),
+			}
+			_, _, err = producer.SendMessage(message)
+			if err != nil {
+				log.Printf("Failed to send message: %v", err)
+			} else {
+				log.Println("Message sent successfully")
+			}
 		}(msg)
 	}
 
 	wg.Wait()
-
-	producer, err := sarama.NewSyncProducer(conf.Kafka.Brokers, nil)
-	if err != nil {
-		log.Fatalf("Failed to start producer: %v", err)
-	}
-	defer func(producer sarama.SyncProducer) {
-		err := producer.Close()
-		if err != nil {
-			log.Printf("Error closing producer: %v", err)
-		}
-	}(producer)
-
-	for _, doc := range sampleDocs {
-		docBytes, _ := json.Marshal(doc)
-		message := &sarama.ProducerMessage{
-			Topic: conf.Kafka.ProcessedTopic,
-			Value: sarama.ByteEncoder(docBytes),
-		}
-		_, _, err = producer.SendMessage(message)
-		if err != nil {
-			log.Printf("Failed to send message: %v", err)
-		} else {
-			log.Println("Message sent successfully")
-		}
-	}
 }
