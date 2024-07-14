@@ -1,3 +1,4 @@
+// main.go
 package main
 
 import (
@@ -10,26 +11,40 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"log"
+	"os"
+	"path/filepath"
 	"sync"
 )
 
 func main() {
-	// Загрузка конфигурации
-	conf, err := config.LoadConfig("config/config.yaml")
+	cwd, err := os.Getwd()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		panic(err)
+	}
+	fmt.Println("Current working directory:", cwd)
+
+	// Установить путь к конфигурационному файлу
+	configPath := filepath.Join(cwd, "config/config.yaml")
+
+	fmt.Println("Config path:", configPath)
+
+	config, err := config.LoadConfig(configPath)
+	if err != nil {
+		fmt.Printf("Failed to load config: %v\n", err)
+		os.Exit(1)
 	}
 
-	// Подключение к базе данных
+	fmt.Println("Config loaded successfully:", config)
+
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=%s",
-		conf.Database.Host,
-		conf.Database.User,
-		conf.Database.Password,
-		conf.Database.DBName,
-		conf.Database.Port,
-		conf.Database.SSLMode,
-		conf.Database.TimeZone,
+		config.Database.Host,
+		config.Database.User,
+		config.Database.Password,
+		config.Database.DBName,
+		config.Database.Port,
+		config.Database.SSLMode,
+		config.Database.TimeZone,
 	)
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
@@ -42,16 +57,15 @@ func main() {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	// Настройка Kafka потребителя
 	saramaConfig := sarama.NewConfig()
 	saramaConfig.Consumer.Return.Errors = true
 
-	consumer, err := sarama.NewConsumer(conf.Kafka.Brokers, saramaConfig)
+	consumer, err := sarama.NewConsumer(config.Kafka.Brokers, saramaConfig)
 	if err != nil {
 		log.Fatalf("Failed to start consumer: %v", err)
 	}
 
-	partitionConsumer, err := consumer.ConsumePartition(conf.Kafka.Topic, 0, sarama.OffsetNewest)
+	partitionConsumer, err := consumer.ConsumePartition(config.Kafka.Topic, 0, sarama.OffsetNewest)
 	if err != nil {
 		log.Fatalf("Failed to start partition consumer: %v", err)
 	}
@@ -63,7 +77,6 @@ func main() {
 		}
 	}(partitionConsumer)
 
-	// Настройка репозитория и процессора
 	repo := repository.NewDatabaseRepository(db)
 	proc := processor.NewDocumentProcessor(repo)
 
@@ -95,7 +108,6 @@ func main() {
 		}
 	}
 
-	// Обработка ошибок потребителя
 	go func() {
 		for err := range partitionConsumer.Errors() {
 			log.Printf("Error consuming messages: %v", err)
@@ -104,7 +116,6 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	// Чтение сообщений из Kafka
 	for msg := range partitionConsumer.Messages() {
 		wg.Add(1)
 		go func(msg *sarama.ConsumerMessage) {
@@ -122,32 +133,33 @@ func main() {
 			}
 
 			log.Printf("Processed document: %+v", processedDoc)
-
-			// Отправка обработанного сообщения в Kafka
-			producer, err := sarama.NewSyncProducer(conf.Kafka.Brokers, nil)
-			if err != nil {
-				log.Fatalf("Failed to start producer: %v", err)
-			}
-			defer func(producer sarama.SyncProducer) {
-				err := producer.Close()
-				if err != nil {
-					log.Printf("Error closing producer: %v", err)
-				}
-			}(producer)
-
-			docBytes, _ := json.Marshal(processedDoc)
-			message := &sarama.ProducerMessage{
-				Topic: conf.Kafka.ProcessedTopic,
-				Value: sarama.ByteEncoder(docBytes),
-			}
-			_, _, err = producer.SendMessage(message)
-			if err != nil {
-				log.Printf("Failed to send message: %v", err)
-			} else {
-				log.Println("Message sent successfully")
-			}
 		}(msg)
 	}
 
 	wg.Wait()
+
+	producer, err := sarama.NewSyncProducer(config.Kafka.Brokers, nil)
+	if err != nil {
+		log.Fatalf("Failed to start producer: %v", err)
+	}
+	defer func(producer sarama.SyncProducer) {
+		err := producer.Close()
+		if err != nil {
+			log.Printf("Error closing producer: %v", err)
+		}
+	}(producer)
+
+	for doc := range sampleDocs {
+		docBytes, _ := json.Marshal(doc)
+		message := &sarama.ProducerMessage{
+			Topic: config.Kafka.ProcessedTopic,
+			Value: sarama.ByteEncoder(docBytes),
+		}
+		_, _, err = producer.SendMessage(message)
+		if err != nil {
+			log.Printf("Failed to send message: %v", err)
+		} else {
+			log.Println("Message sent successfully")
+		}
+	}
 }

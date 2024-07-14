@@ -1,13 +1,13 @@
 database:
-  host: ${DB_HOST}
-  user: ${DB_USER}
-  password: ${DB_PASSWORD}
-  dbname: ${DB_NAME}
-  port: ${DB_PORT}
-  sslmode: ${DB_SSLMODE}
-  timezone: ${DB_TIMEZONE}
+  host: "db"
+  user: "testuser"
+  password: "testpassword"
+  dbname: "testdb"
+  port: 5432
+  sslmode: "disable"
+  timezone: "UTC"
 kafka:
   brokers:
-    - ${KAFKA_BROKERS}
-  topic: ${KAFKA_TOPIC}
-  processed_topic: ${KAFKA_PROCESSED_TOPIC}
+    - "kafka:9092"
+  topic: "test-topic"
+  processed_topic: "processed-topic"
