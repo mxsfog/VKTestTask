@@ -28,23 +28,23 @@ func main() {
 
 	fmt.Println("Config path:", configPath)
 
-	config, err := config.LoadConfig(configPath)
+	conf, err := config.LoadConfig(configPath)
 	if err != nil {
 		fmt.Printf("Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Println("Config loaded successfully:", config)
+	fmt.Println("Config loaded successfully:", conf)
 
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=%s",
-		config.Database.Host,
-		config.Database.User,
-		config.Database.Password,
-		config.Database.DBName,
-		config.Database.Port,
-		config.Database.SSLMode,
-		config.Database.TimeZone,
+		conf.Database.Host,
+		conf.Database.User,
+		conf.Database.Password,
+		conf.Database.DBName,
+		conf.Database.Port,
+		conf.Database.SSLMode,
+		conf.Database.TimeZone,
 	)
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
@@ -60,12 +60,12 @@ func main() {
 	saramaConfig := sarama.NewConfig()
 	saramaConfig.Consumer.Return.Errors = true
 
-	consumer, err := sarama.NewConsumer(config.Kafka.Brokers, saramaConfig)
+	consumer, err := sarama.NewConsumer(conf.Kafka.Brokers, saramaConfig)
 	if err != nil {
 		log.Fatalf("Failed to start consumer: %v", err)
 	}
 
-	partitionConsumer, err := consumer.ConsumePartition(config.Kafka.Topic, 0, sarama.OffsetNewest)
+	partitionConsumer, err := consumer.ConsumePartition(conf.Kafka.Topic, 0, sarama.OffsetNewest)
 	if err != nil {
 		log.Fatalf("Failed to start partition consumer: %v", err)
 	}
@@ -138,7 +138,7 @@ func main() {
 
 	wg.Wait()
 
-	producer, err := sarama.NewSyncProducer(config.Kafka.Brokers, nil)
+	producer, err := sarama.NewSyncProducer(conf.Kafka.Brokers, nil)
 	if err != nil {
 		log.Fatalf("Failed to start producer: %v", err)
 	}
@@ -149,10 +149,10 @@ func main() {
 		}
 	}(producer)
 
-	for doc := range sampleDocs {
+	for _, doc := range sampleDocs {
 		docBytes, _ := json.Marshal(doc)
 		message := &sarama.ProducerMessage{
-			Topic: config.Kafka.ProcessedTopic,
+			Topic: conf.Kafka.ProcessedTopic,
 			Value: sarama.ByteEncoder(docBytes),
 		}
 		_, _, err = producer.SendMessage(message)
