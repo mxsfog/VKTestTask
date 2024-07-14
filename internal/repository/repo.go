@@ -22,13 +22,3 @@ func (r *DatabaseRepository) FindByUrl(url string) ([]TDocument, error) {
 	err := r.db.Where("url = ?", url).Find(&documents).Error
 	return documents, err
 }
-
-// TDocument - структура документа
-type TDocument struct {
-	ID             uint   `gorm:"primaryKey"`
-	Url            string `gorm:"not null"`
-	PubDate        int64  `gorm:"not null"`
-	FetchTime      int64  `gorm:"not null"`
-	Text           string `gorm:"not null"`
-	FirstFetchTime int64  `gorm:"not null"`
-}

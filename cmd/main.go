@@ -1,4 +1,3 @@
-// main.go
 package main
 
 import (
@@ -8,8 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/IBM/sarama"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 	"log"
 	"os"
 	"path/filepath"
@@ -36,25 +33,10 @@ func main() {
 
 	fmt.Println("Config loaded successfully:", conf)
 
-	dsn := fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=%s",
-		conf.Database.Host,
-		conf.Database.User,
-		conf.Database.Password,
-		conf.Database.DBName,
-		conf.Database.Port,
-		conf.Database.SSLMode,
-		conf.Database.TimeZone,
-	)
-
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	// Настройка базы данных SQLite
+	db, err := repository.SetupDatabase(conf.Database.DSN)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
-	}
-
-	// Автоматическая миграция базы данных
-	if err := db.AutoMigrate(&repository.TDocument{}); err != nil {
-		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
 	saramaConfig := sarama.NewConfig()

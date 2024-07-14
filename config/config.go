@@ -9,13 +9,7 @@ import (
 
 type Config struct {
 	Database struct {
-		Host     string `yaml:"host"`
-		User     string `yaml:"user"`
-		Password string `yaml:"password"`
-		DBName   string `yaml:"dbname"`
-		Port     int    `yaml:"port"`
-		SSLMode  string `yaml:"sslmode"`
-		TimeZone string `yaml:"timezone"`
+		DSN string `yaml:"dsn"`
 	} `yaml:"database"`
 	Kafka struct {
 		Brokers        []string `yaml:"brokers"`
