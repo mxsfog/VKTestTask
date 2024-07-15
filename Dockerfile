@@ -1,29 +1,34 @@
-# Use the official Golang image to create a build artifact.
-FROM golang:1.20-alpine as builder
+# Используем официальный образ golang для сборки
+FROM golang:1.20 AS builder
 
-# Set the Current Working Directory inside the container
+# Устанавливаем рабочую директорию внутри контейнера
 WORKDIR /app
 
-# Copy go mod and sum files
+# Копируем файлы модулей и загружаем зависимости
 COPY go.mod go.sum ./
-
-# Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
 RUN go mod download
 
-# Copy the source from the current directory to the Working Directory inside the container
+# Копируем остальные файлы проекта
 COPY . .
 
-# Build the Go app
-RUN go build -o main ./cmd/main.go
+# Сборка приложения с указанием исходного файла main.go
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o /app/main ./cmd/main.go
 
-# Start a new stage from scratch
-FROM alpine:3.16
+# Используем минималистичный образ для запуска
+FROM alpine:latest
 
-WORKDIR /root/
+# Устанавливаем необходимые зависимости
+RUN apk --no-cache add ca-certificates
 
-# Copy the Pre-built binary file from the previous stage
-COPY --from=builder /app/main .
-COPY --from=builder /app/config/config.yaml ./config/config.yaml
+# Копируем скомпилированное приложение из стадии сборки
+COPY --from=builder /app/main /app/main
+COPY --from=builder /app/config/config.yaml /app/config/config.yaml
 
-# Command to run the executable
+# Устанавливаем рабочую директорию
+WORKDIR /app
+
+# Проверка наличия файлов в конечном образе
+RUN ls -la /app
+
+# Запуск приложения
 CMD ["./main"]
